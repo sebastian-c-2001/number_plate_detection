@@ -80,7 +80,7 @@ def segment_characters(plate):
 
 
 # 4. Classify each segmented character using a pre-trained SVM
-def classify_characters(characters, classifier):
+def classify_characters(characters, classifier=None):
     """
     Classifies each character using the provided classifier.
     Characters are resized and flattened before being passed to the classifier.
@@ -93,8 +93,8 @@ def classify_characters(characters, classifier):
         char_flatten = char_resized.flatten().reshape(1, -1)
 
         # Predict the character using the trained classifier
-        recognized_char = classifier.predict(char_flatten)
-        recognized_text += str(recognized_char[0])
+        # recognized_char = classifier.predict(char_flatten)
+        # recognized_text += str(recognized_char[0])
 
     return recognized_text
 
@@ -130,14 +130,14 @@ def detect_license_plates(image_path):
 
     # Step 4: Classify each segmented character using a pre-trained SVM
     # Train the SVM classifier on the EMNIST dataset
-    classifier = train_svm_on_mnist()
+    # classifier = train_svm_on_mnist()
 
     for plate in plates:
         # Step 3: Segment characters from the license plate
         characters = segment_characters(plate)
 
         # Now use the trained classifier for recognizing license plate characters
-        recognized_text = classify_characters(characters, classifier)
+        recognized_text = classify_characters(characters)
 
         print("Recognized License Plate: ", recognized_text)
     else:
