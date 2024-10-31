@@ -4,6 +4,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
 import matplotlib.pyplot as plt
 from emnist import extract_training_samples
+#todo this needs to be remade after we solve all the issues in notebook file
 
 # 1. Preprocess the input image (convert to grayscale)
 def preprocess_image(image_path):
