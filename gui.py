@@ -163,13 +163,14 @@ def detectie_numar():
             image_with_boxes = cropped_image.copy()
             nr=0;
             # Iterăm prin sorted_boxes și desenăm fiecare bounding box
-            for box in sorted_boxes:
-                x, y, w, h = box
+            for i in sorted_boxes:
+                x, y, w, h = i
                 # Desenează un dreptunghi (bounding box)
                 if  h > 30 and 5 < w < 50:
                     cv2.rectangle(image_with_boxes, (x, y), (x + w, y + h), (0, 255, 0), 2)  # verde, grosime 2
-                    print("nr= ", nr)
+
                     nr+=1
+            print("Nr de caractere = ", nr)
             # Afișare imagine cu bounding box-uri
             plt.figure(), plt.imshow(image_with_boxes, cmap='gray'), plt.title("Bounding Boxes"), plt.show()
             for i, (x, y, w, h) in enumerate(sorted_boxes):
@@ -183,7 +184,7 @@ def detectie_numar():
 
                     plt.figure(), plt.imshow(res, cmap='gray'), plt.title("Char Img"), plt.show()
                     characters.append(res)
-            print(characters)
+
             if(len(characters)<=1):
                 characters = []
                 for i, (x, y, w, h) in enumerate(sorted_boxes):
@@ -211,10 +212,14 @@ def detectie_numar():
                 output_text.insert(tk.END, text_nou)
                 font = cv2.FONT_HERSHEY_SIMPLEX
                 rez = image.copy()
+                print(box)
                 # todo find a way to extract xmin, ymax si (xmin,ymin), (xmax, ymax) to plot well, it seems to be different from one image to another
                 cv2.putText(rez, text=text, org=(box[0][0][0], box[2][0][1] + 70), fontFace=font, fontScale=2,
                             color=(0, 255, 0), thickness=3, lineType=cv2.LINE_AA)
-                cv2.rectangle(rez, tuple(box[0][0]), tuple(box[2][0]), (0, 255, 0), 3)
+                if (abs(box[0][0][1] - box [2][0][1])<50):
+                    cv2.rectangle(rez, tuple(box[0][0]), tuple(box[3][0]), (0, 255, 0), 3)
+                else:
+                    cv2.rectangle(rez, tuple(box[0][0]), tuple(box[2][0]), (0, 255, 0), 3)
                 plt.figure(), plt.imshow(rez), plt.show()
                 rez = Image.fromarray(rez)
                 img = rez.resize((320, 240))  # Redimensionare pentru afișare
