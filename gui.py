@@ -2,13 +2,10 @@
 import os
 import tkinter as tk
 from tkinter import filedialog
-from tkinter.messagebox import showerror
-from sklearn import svm
 from PIL import Image, ImageTk
 import cv2
 import numpy as np
 from joblib import load
-from skimage import io
 import matplotlib.pyplot as plt
 import imutils
 from skimage.feature import hog
@@ -79,6 +76,7 @@ def make_feature(img):
 # Funcție pentru încărcarea imaginii
 def load_image():
     clear_output_text()
+    plt.close('all')
     global file_path
     file_path = filedialog.askopenfilename(title="Open Image File",
                                            filetypes=[("Image Files", "*.jpg;*.jpeg;*.png;*.bmp")])
@@ -109,7 +107,7 @@ def detectie_numar():
     plt.figure(), plt.imshow(image), plt.show(), plt.show()
     plt.figure(), plt.imshow(gray_image, cmap='gray'), plt.show()
 
-    # bfilter = cv2.bilateralFilter(gray_image, 11, 17, 17) # Noise reduction #todo add only if it is necessary
+    #bfilter = cv2.bilateralFilter(gray_image, 11, 17, 17) # Noise reduction #todo add only if it is necessary
     edged = cv2.Canny(gray_image, 30, 200)  # Edge detection
     plt.figure(), plt.imshow(edged, cmap='gray'), plt.show(), plt.show()
 
@@ -147,8 +145,8 @@ def detectie_numar():
 
             blurred_plate = cv2.GaussianBlur(cropped_image, (3, 3), 0)  # todo in majority of cases helps
             edges_plate = cv2.Canny(blurred_plate, 50, 150)
-            # plt.figure(), plt.imshow(blurred_plate, cmap='gray'), plt.show()
-            # plt.figure(), plt.imshow(edges_plate, cmap='gray'), plt.show()
+            plt.figure(), plt.imshow(blurred_plate, cmap='gray'), plt.title("Blurred_plate"), plt.show()
+            plt.figure(), plt.imshow(edges_plate, cmap='gray'), plt.title("Canny"),plt.show()
 
             # kernel = np.ones((3, 3), np.uint8)
             # dilated = cv2.dilate(edges_plate, kernel, iterations=1)
@@ -162,6 +160,18 @@ def detectie_numar():
             sorted_boxes = sorted(bounding_boxes, key=lambda x: x[0])
 
             characters = []
+            image_with_boxes = cropped_image.copy()
+            nr=0;
+            # Iterăm prin sorted_boxes și desenăm fiecare bounding box
+            for box in sorted_boxes:
+                x, y, w, h = box
+                # Desenează un dreptunghi (bounding box)
+                if  h > 30 and 5 < w < 50:
+                    cv2.rectangle(image_with_boxes, (x, y), (x + w, y + h), (0, 255, 0), 2)  # verde, grosime 2
+                    print("nr= ", nr)
+                    nr+=1
+            # Afișare imagine cu bounding box-uri
+            plt.figure(), plt.imshow(image_with_boxes, cmap='gray'), plt.title("Bounding Boxes"), plt.show()
             for i, (x, y, w, h) in enumerate(sorted_boxes):
                 # Filter by reasonable character dimensions
                 if h > 40 and 5 < w < 50:
@@ -173,8 +183,22 @@ def detectie_numar():
 
                     plt.figure(), plt.imshow(res, cmap='gray'), plt.title("Char Img"), plt.show()
                     characters.append(res)
+            print(characters)
+            if(len(characters)<=1):
+                characters = []
+                for i, (x, y, w, h) in enumerate(sorted_boxes):
+                    # Filter by reasonable character dimensions
+                    if h > 30 and 5 < w < 50:
+                        char = cropped_image[y:y + h, x:x + w]
+                        im, thre = cv2.threshold(char, 100, 255,
+                                                 cv2.THRESH_BINARY_INV)  # todo find a general value for threshold -> for some works well 100, for others 50
+                        thre = np.pad(thre, (2, 2), 'constant', constant_values=(0, 0))
+                        res = cv2.resize(thre, dsize=dsize, interpolation=cv2.INTER_CUBIC)  # resize 30, 80
 
-            if len(characters) > 4:  # todo normal should be >5 but for tests i keep it >4
+                        plt.figure(), plt.imshow(res, cmap='gray'), plt.title("Char Img"), plt.show()
+                        characters.append(res)
+
+            if len(characters) > 5:  # todo normal should be >5 but for tests i keep it >4
                 # (it s a problem in license plates that have a sticker between numbers -> doesn't take the second one because it s too wide with sticker next)
                 text = ""
                 X_feature = np.array([make_feature(i) for i in characters], np.float32)
@@ -210,7 +234,7 @@ dsize = (30, 80)
 
 # Crearea ferestrei principale
 root = tk.Tk()
-root.title("Clasificator SVM")
+root.title("Number plate detection")
 root.geometry("600x400")
 
 # Etichetă pentru afișarea imaginii încărcate
@@ -226,7 +250,7 @@ load_button = tk.Button(button_frame, text="Încarcă Imaginea", command=load_im
 load_button.pack(fill="x", padx=10, pady=10)
 
 # Buton pentru aplicarea SVM
-apply_button = tk.Button(button_frame, text="Aplică SVM", command=detectie_numar)
+apply_button = tk.Button(button_frame, text="Detecteaza placuta", command=detectie_numar)
 apply_button.pack(fill="x", padx=10, pady=10)
 
 # Text box pentru afișarea rezultatului
