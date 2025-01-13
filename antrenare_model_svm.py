@@ -7,7 +7,6 @@ from skimage.feature import hog
 from joblib import dump
 
 
-
 #pentru functia de preprocesare imagine
 blur_size = (3, 3)
 #pentru a obtine rezultate constante la antrenare folosim un seed
@@ -68,6 +67,7 @@ def make_feature(img):
 #Incarcarea bazei de date
 data_train, class_dict = load_dataset('data/training_data')
 data_test, _ = load_dataset('data/testing_data')
+
 print(data_train[1])
 x_train,y_train = change(data_train)
 x_test, y_test = change(data_test)
@@ -75,7 +75,7 @@ x_test, y_test = change(data_test)
 X_train_feature = np.array([make_feature(i) for i in x_train], np.float32)
 X_test_feature = np.array([make_feature(i) for i in x_test], np.float32)
 
-X_train_feature.shape, X_test_feature.shape
+#X_train_feature.shape, X_test_feature.shape
 
 # Antrenarea propriu-zisa
 svm = svm.LinearSVC(C=0.5, random_state=seed)
