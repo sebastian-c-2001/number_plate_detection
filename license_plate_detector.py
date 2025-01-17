@@ -43,6 +43,64 @@ class LicensePlateDetector:
         # Setup GUI
         self._setup_gui()
 
+
+    @staticmethod
+    def _load_dataset(directory):
+        """
+        Load training dataset from directory
+        Args:
+            directory: Path to dataset directory
+        Returns:
+            Tuple of (data list, class dictionary)
+        """
+        class_dict = {}
+        data = []
+        for i, dir in enumerate(sorted(os.listdir(directory))):
+            class_dict[i] = dir
+            for impath in sorted(os.listdir(os.path.join(directory, dir))):
+                data_item = {
+                    "path": os.path.join(directory, dir, impath),
+                    "label": i
+                }
+                data.append(data_item)
+        return data, class_dict
+
+    @staticmethod
+    def _preprocess_image(img):
+        """Preprocess a single image for training or prediction"""
+        blurred = cv2.GaussianBlur(img, (3, 3), 0)  # smoothing
+        _, thresh = cv2.threshold(blurred, 100, 255, cv2.THRESH_BINARY_INV)  # binarization
+        thresh = np.pad(thresh, (2, 2), 'constant', constant_values=(0, 0))
+        resized = cv2.resize(thresh, dsize=(30, 80), interpolation=cv2.INTER_CUBIC)
+        return resized
+
+    def _preprocess_dataset(self, data):
+        """Preprocess entire dataset for training"""
+        processed_images = []
+        labels = []
+        for item in data:
+            img = cv2.imread(item['path'], cv2.IMREAD_GRAYSCALE)
+            processed = self._preprocess_image(img)
+            processed_images.append(processed)
+            labels.append(item['label'])
+        return np.stack(processed_images), np.array(labels)
+
+    @staticmethod
+    def _make_feature(img):
+        """
+        Extract HOG features from image
+        Args:
+            img: Input image
+        Returns:
+            HOG features
+        """
+        return hog(
+            img, orientations=12,
+            pixels_per_cell=(14, 14),
+            cells_per_block=(1, 1),
+            block_norm="L2"
+        )
+
     def train_model(self):
         """Train the SVM model for character recognition"""
         # Load training and testing data
@@ -70,84 +128,6 @@ class LicensePlateDetector:
         dump(self.svm, 'svm_model.joblib')
         print("Model saved successfully.")
 
-    @staticmethod
-    def _preprocess_image(img):
-        """Preprocess a single image for training or prediction"""
-        blurred = cv2.GaussianBlur(img, (3, 3), 0)  # smoothing
-        _, thresh = cv2.threshold(blurred, 100, 255, cv2.THRESH_BINARY_INV)  # binarization
-        thresh = np.pad(thresh, (2, 2), 'constant', constant_values=(0, 0))
-        resized = cv2.resize(thresh, dsize=(30, 80), interpolation=cv2.INTER_CUBIC)
-        return resized
-
-    def _preprocess_dataset(self, data):
-        """Preprocess entire dataset for training"""
-        processed_images = []
-        labels = []
-        for item in data:
-            img = cv2.imread(item['path'], cv2.IMREAD_GRAYSCALE)
-            processed = self._preprocess_image(img)
-            processed_images.append(processed)
-            labels.append(item['label'])
-        return np.stack(processed_images), np.array(labels)
-
-    def _setup_gui(self):
-        """Setup all GUI components"""
-        # Create image display label
-        self.label_image = tk.Label(self.root, text="Image will appear here")
-        self.label_image.grid(row=0, column=1, padx=10, pady=10)
-
-        # Create button frame
-        button_frame = tk.Frame(self.root)
-        button_frame.grid(row=0, column=0, padx=10, pady=10, sticky="ns")
-
-        # Create buttons
-        load_button = tk.Button(button_frame, text="Load Image", command=self._load_image)
-        load_button.pack(fill="x", padx=10, pady=10)
-
-        detect_button = tk.Button(button_frame, text="Detect License Plate",
-                                  command=self._detect_license_plate)
-        detect_button.pack(fill="x", padx=10, pady=10)
-
-        train_button = tk.Button(button_frame, text="Retrain Model",
-                                 command=self._retrain_model)
-        train_button.pack(fill="x", padx=10, pady=10)
-
-        # Create output text box
-        self.output_text = tk.Text(self.root, height=5, width=60, state='disabled')
-        self.output_text.grid(row=1, column=0, columnspan=2, padx=10, pady=10)
-
-    def _retrain_model(self):
-        """Handler for retrain button"""
-        if messagebox.askyesno("Retrain Model",
-                               "Are you sure you want to retrain the model? This may take a while."):
-            try:
-                self.train_model()
-                messagebox.showinfo("Success", "Model retrained successfully!")
-            except Exception as e:
-                messagebox.showerror("Error", f"Failed to retrain model: {str(e)}")
-
-    # When you need to update the text:
-    def _update_output_text(self, message):
-        self.output_text.configure(state='normal')  # Temporarily enable to update
-        self.output_text.delete(1.0, tk.END)
-        self.output_text.insert(tk.END, message)
-        self.output_text.configure(state='disabled')  # Disable again
-
-    @staticmethod
-    def _make_feature(img):
-        """
-        Extract HOG features from image
-        Args:
-            img: Input image
-        Returns:
-            HOG features
-        """
-        return hog(
-            img, orientations=12,
-            pixels_per_cell=(14, 14),
-            cells_per_block=(1, 1),
-            block_norm="L2"
-        )
 
     @staticmethod
     def _filter_similar_contours(contours, overlap_threshold=0.5):
@@ -209,43 +189,43 @@ class LicensePlateDetector:
 
         return filtered_contours
 
+    def _extract_characters(self, plate_image, sorted_boxes):
+        """Extract individual characters from the plate image"""
+        characters = []
+
+        # First attempt with stricter height threshold
+        for x, y, w, h in sorted_boxes:
+            if h > 40 and 5 < w < 50:
+                char = plate_image[y:y + h, x:x + w]
+                _, thresh = cv2.threshold(char, 100, 255, cv2.THRESH_BINARY_INV)
+                thresh = np.pad(thresh, (2, 2), 'constant', constant_values=(0, 0))
+                resized = cv2.resize(thresh, dsize=self.CHAR_SIZE, interpolation=cv2.INTER_CUBIC)
+                characters.append(resized)
+
+        # Second attempt with relaxed height threshold if needed
+        if len(characters) <= 1:
+            characters = []
+            for x, y, w, h in sorted_boxes:
+                if h > 30 and 5 < w < 50:
+                    char = plate_image[y:y + h, x:x + w]
+                    _, thresh = cv2.threshold(char, 100, 255, cv2.THRESH_BINARY_INV)
+                    thresh = np.pad(thresh, (2, 2), 'constant', constant_values=(0, 0))
+                    resized = cv2.resize(thresh, dsize=self.CHAR_SIZE, interpolation=cv2.INTER_CUBIC)
+                    # plt.figure(), plt.imshow(resized, cmap='gray'), plt.title("Character"), plt.show()
+                    characters.append(resized)
+
+        return characters
+
     @staticmethod
-    def _load_dataset(directory):
-        """
-        Load training dataset from directory
-        Args:
-            directory: Path to dataset directory
-        Returns:
-            Tuple of (data list, class dictionary)
-        """
-        class_dict = {}
-        data = []
-        for i, dir in enumerate(sorted(os.listdir(directory))):
-            class_dict[i] = dir
-            for impath in sorted(os.listdir(os.path.join(directory, dir))):
-                data_item = {
-                    "path": os.path.join(directory, dir, impath),
-                    "label": i
-                }
-                data.append(data_item)
-        return data, class_dict
-
-    def _load_image(self):
-        """Load and display image in the GUI"""
-        self._update_output_text('')
-        # plt.close('all')
-
-        self.current_image_path = filedialog.askopenfilename(
-            title="Open Image File",
-            filetypes=[("Image Files", "*.jpg;*.jpeg;*.png;*.bmp")]
-        )
-
-        if self.current_image_path:
-            image = Image.open(self.current_image_path)
-            image = image.resize((320, 240))  # Resize for display
-            photo = ImageTk.PhotoImage(image)
-            self.label_image.config(image=photo)
-            self.label_image.image = photo  # Keep a reference!
+    def _draw_result(image, box):
+        """Draw the detected license plate on the image"""
+        result_image = image.copy()
+        x_coords = [point[0][0] for point in box]
+        y_coords = [point[0][1] for point in box]
+        x1, y1 = min(x_coords), min(y_coords)
+        x2, y2 = max(x_coords), max(y_coords)
+        cv2.rectangle(result_image, (x1, y1), (x2, y2), (0, 255, 0), 3)
+        return result_image
 
     def _detect_license_plate(self):
         """Main function for license plate detection and recognition"""
@@ -343,43 +323,67 @@ class LicensePlateDetector:
         if not detection_successful:
             self._update_output_text("License plate detection failed")
 
-    def _extract_characters(self, plate_image, sorted_boxes):
-        """Extract individual characters from the plate image"""
-        characters = []
 
-        # First attempt with stricter height threshold
-        for x, y, w, h in sorted_boxes:
-            if h > 40 and 5 < w < 50:
-                char = plate_image[y:y + h, x:x + w]
-                _, thresh = cv2.threshold(char, 100, 255, cv2.THRESH_BINARY_INV)
-                thresh = np.pad(thresh, (2, 2), 'constant', constant_values=(0, 0))
-                resized = cv2.resize(thresh, dsize=self.CHAR_SIZE, interpolation=cv2.INTER_CUBIC)
-                characters.append(resized)
+    # When you need to update the text:
+    def _update_output_text(self, message):
+        self.output_text.configure(state='normal')  # Temporarily enable to update
+        self.output_text.delete(1.0, tk.END)
+        self.output_text.insert(tk.END, message)
+        self.output_text.configure(state='disabled')  # Disable again
 
-        # Second attempt with relaxed height threshold if needed
-        if len(characters) <= 1:
-            characters = []
-            for x, y, w, h in sorted_boxes:
-                if h > 30 and 5 < w < 50:
-                    char = plate_image[y:y + h, x:x + w]
-                    _, thresh = cv2.threshold(char, 100, 255, cv2.THRESH_BINARY_INV)
-                    thresh = np.pad(thresh, (2, 2), 'constant', constant_values=(0, 0))
-                    resized = cv2.resize(thresh, dsize=self.CHAR_SIZE, interpolation=cv2.INTER_CUBIC)
-                    # plt.figure(), plt.imshow(resized, cmap='gray'), plt.title("Character"), plt.show()
-                    characters.append(resized)
+    def _load_image(self):
+        """Load and display image in the GUI"""
+        self._update_output_text('')
+        # plt.close('all')
 
-        return characters
+        self.current_image_path = filedialog.askopenfilename(
+            title="Open Image File",
+            filetypes=[("Image Files", "*.jpg;*.jpeg;*.png;*.bmp")]
+        )
 
-    @staticmethod
-    def _draw_result(image, box):
-        """Draw the detected license plate on the image"""
-        result_image = image.copy()
-        x_coords = [point[0][0] for point in box]
-        y_coords = [point[0][1] for point in box]
-        x1, y1 = min(x_coords), min(y_coords)
-        x2, y2 = max(x_coords), max(y_coords)
-        cv2.rectangle(result_image, (x1, y1), (x2, y2), (0, 255, 0), 3)
-        return result_image
+        if self.current_image_path:
+            image = Image.open(self.current_image_path)
+            image = image.resize((320, 240))  # Resize for display
+            photo = ImageTk.PhotoImage(image)
+            self.label_image.config(image=photo)
+            self.label_image.image = photo  # Keep a reference!
+
+    def _retrain_model(self):
+        """Handler for retrain button"""
+        if messagebox.askyesno("Retrain Model",
+                               "Are you sure you want to retrain the model? This may take a while."):
+            try:
+                self.train_model()
+                messagebox.showinfo("Success", "Model retrained successfully!")
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to retrain model: {str(e)}")
+
+    def _setup_gui(self):
+        """Setup all GUI components"""
+        # Create image display label
+        self.label_image = tk.Label(self.root, text="Image will appear here")
+        self.label_image.grid(row=0, column=1, padx=10, pady=10)
+
+        # Create button frame
+        button_frame = tk.Frame(self.root)
+        button_frame.grid(row=0, column=0, padx=10, pady=10, sticky="ns")
+
+        # Create buttons
+        load_button = tk.Button(button_frame, text="Load Image", command=self._load_image)
+        load_button.pack(fill="x", padx=10, pady=10)
+
+        detect_button = tk.Button(button_frame, text="Detect License Plate",
+                                  command=self._detect_license_plate)
+        detect_button.pack(fill="x", padx=10, pady=10)
+
+        train_button = tk.Button(button_frame, text="Retrain Model",
+                                 command=self._retrain_model)
+        train_button.pack(fill="x", padx=10, pady=10)
+
+        # Create output text box
+        self.output_text = tk.Text(self.root, height=5, width=60, state='disabled')
+        self.output_text.grid(row=1, column=0, columnspan=2, padx=10, pady=10)
+
 
     def run(self):
         """Start the application"""
